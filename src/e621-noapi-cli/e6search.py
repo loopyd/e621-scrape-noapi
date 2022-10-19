@@ -1,5 +1,4 @@
-import urllib.response
-from typing import Final, Set, Optional, Callable
+from typing import Set, Optional, Callable
 import pandas as pd
 
 

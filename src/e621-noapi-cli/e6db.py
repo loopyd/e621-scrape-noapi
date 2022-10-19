@@ -1,14 +1,12 @@
 import datetime
-import gzip
 import logging
 import os
-import time
 import urllib.request
 import urllib.response
 from enum import Enum, unique, auto
-from typing import Final, List, Set, Optional, Callable
-import pandas as pd
-from .filesize import bytes_to_gigabytes, bytes_to_megabytes
+from typing import Final, List
+# import pandas as pd
+# from .filesize import bytes_to_gigabytes, bytes_to_megabytes
 
 
 _log = logging.getLogger("e621-noapi-cli")

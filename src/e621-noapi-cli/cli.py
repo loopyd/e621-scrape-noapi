@@ -2,14 +2,13 @@ from dataclasses import dataclass
 import os
 import pathlib
 from typing import List
-from .e6db import download_e6_csvs, filter_posts_by_tags, get_file_url
-from .filesize import bytes_to_gigabytes, bytes_to_megabytes
+from .e6db import (
+    DBExportManager, DBExportTarget
+)
 import time
-import sys
 import pandas as pd
 import logging
 import argparse
-from pydantic import dataclasses
 
 
 _log = logging.getLogger("e621-noapi-cli")
@@ -125,11 +124,11 @@ def parse_args(args: str) -> AppConfig:
         num_samples=int(args.num_samples),
         store_metadata=args.store_metadata,
     )
-    return AppConfig
+    return config
 
 
 def main(config: AppConfig):
-    download_e6_csvs(delete_gzipped_csvs=False)
+    dbExportManager = DBExportManager(base_path=config.csv_dir, refresh=config.refresh_csv, days_ago=0)
 
     # The e6 database stores the tags as one giant string, but we want to manipulate it as a list of unique tags.
     # So we apply the string splitting and set conversion during CSV load, then rename the column to "tags".
