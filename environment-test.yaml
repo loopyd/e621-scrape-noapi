@@ -1,0 +1,8 @@
+name: e621-noapi-cli
+channels:
+- nodefaults
+dependencies:
+- python=3.10.2
+- pip
+- pip:
+  - -r requirements.txt
