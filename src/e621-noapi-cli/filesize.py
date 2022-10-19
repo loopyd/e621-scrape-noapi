@@ -9,6 +9,7 @@ def bytes_to_megabytes(num_bytes: int, round_decimal_points: int = -1) -> float:
         mb = round(mb, round_decimal_points)
     return mb
 
+
 def bytes_to_gigabytes(num_bytes: int, round_decimal_points: int = -1) -> float:
     """
     Converts a size in bytes (B) to a size in gigabytes (GB), optionally rounding the returned float value.
