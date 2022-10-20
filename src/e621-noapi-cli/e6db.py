@@ -6,7 +6,13 @@ import urllib.response
 from enum import Enum, unique, auto
 from typing import Final, List
 # import pandas as pd
-# from .filesize import bytes_to_gigabytes, bytes_to_megabytes
+from .filesize import (
+    bytes_to_megabytes
+)
+from .e6query import (
+    PostsSearchQueryManager
+)
+import pandas as pd
 
 
 _log = logging.getLogger("e621-noapi-cli")
@@ -64,6 +70,9 @@ class DBExport:
         self.days_ago = days_ago
         self.base_path = base_path
         self.refresh = refresh
+        self.e6_df = pd.DataFrame()
+        if self.export_target == DBExportTarget.POSTS:
+            self.query_manager = PostsSearchQueryManager(self)
 
     def server_filename(self) -> str:
         """

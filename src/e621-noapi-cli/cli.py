@@ -1,9 +1,16 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 import os
 import pathlib
 from typing import List
 from .e6db import (
-    DBExportManager, DBExportTarget
+    DBExportManager
+)
+from .e6datastore import (
+    DataStore,
+    DataStoreFormat
+)
+from .filesize import (
+    bytes_to_gigabytes
 )
 import time
 import pandas as pd
@@ -34,8 +41,27 @@ def ExistingWritableDir(dir_name: str) -> str:
         )
 
 
-@dataclass
-class AppConfig:
+def ExistingReadableFile(file_name: str) -> str:
+    """
+    Argument type validation for existing, readable files.
+
+    Args:
+        - file_name (str): The name of the file (piped through argparse)
+    """
+    filename = str(pathlib.Path(file_name).resolve())
+    if (
+        os.path.exists(filename)
+        and os.path.isfile(filename)
+        and os.access(filename, os.R_OK)
+    ):
+        return filename
+    else:
+        raise argparse.ArgumentTypeError(
+            f"{file_name} does not  exist, or isn't a readable file (no permission)."
+        )
+
+
+class AppConfig(BaseModel):
     """
     AppConfig is the configuration class for the application.  It is created by pydantic and so is serializable to/from config.json
     format.
@@ -57,6 +83,9 @@ class AppConfig:
     refresh_csv: bool
     num_samples: int
     store_metadata: bool
+
+
+appconfig_manager = DataStore(datastore_struct=AppConfig(), datastore_format=DataStoreFormat.JSON)
 
 
 def parse_args(args: str) -> AppConfig:
@@ -113,85 +142,35 @@ def parse_args(args: str) -> AppConfig:
         dest="build_tokendb",
         default=False,
     )
+    parser.add_argument(
+        "config",
+        type=ExistingReadableFile,
+        help="Configuration file loading instead of using command line options.  You can specify a json file.",
+        dest="config_file"
+    )
 
     args = parser.parse_args(args)
-    config = AppConfig(
-        csv_dir=args.csv_dir,
-        samples_dir=args.samples_dir,
-        search_query=List([item for item in args.search_query]),
-        build_tokendb=args.build_tokendb,
-        refresh_csv=args.refresh_csv,
-        num_samples=int(args.num_samples),
-        store_metadata=args.store_metadata,
-    )
-    return config
+    if args.config_file is None:
+        appconfig_manager.datastore_struct = AppConfig(
+            csv_dir=args.csv_dir,
+            samples_dir=args.samples_dir,
+            search_query=List([item for item in args.search_query]),
+            build_tokendb=args.build_tokendb,
+            refresh_csv=args.refresh_csv,
+            num_samples=int(args.num_samples),
+            store_metadata=args.store_metadata,
+        )
+    else:
+        appconfig_manager.datastore_path = args.config_file
+        appconfig_manager.load()
+    return appconfig_manager
 
 
-def main(config: AppConfig):
+def main(config_datastore: DataStore):
+    config = config_datastore.datastore_struct
     dbExportManager = DBExportManager(base_path=config.csv_dir, refresh=config.refresh_csv, days_ago=0)
 
-    # The e6 database stores the tags as one giant string, but we want to manipulate it as a list of unique tags.
-    # So we apply the string splitting and set conversion during CSV load, then rename the column to "tags".
-    time_before = time.time()
-    posts_df = pd.read_csv(
-        f"{config.csv_dir}/posts.csv.gz",
-        sep=",",
-        quotechar='"',
-        converters={"tag_string": lambda x: set(x.split(" "))},
-        compression="gzip",
-    )
-    posts_df.rename(columns={"tag_string": "tags"}, inplace=True)
-    logging.info(
-        f"Loading post database with {len(posts_df)} posts took {time.time() - time_before:.1f}s"
-    )
-
     # Examples of how to work with this data:
-
-    # Using DataFrame.query() to perform basic SQL-style searches or filtering:
-    allowed_file_exts = ["png", "jpg"]
-    min_img_size: int = 512
-    min_fav_count: int = 30
-    min_score: int = 10
-    min_down_score: int = -35
-
-    time_before = time.time()
-    len_before = len(posts_df)
-    size_before = bytes_to_gigabytes(posts_df["file_size"].sum(), 2)
-
-    # See: https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.query.html
-    # for an explanation of how to use .query(). In short, use & to AND things together, and
-    # @variable_name to reference variables in the outer scope.
-    posts_df.query(
-        "fav_count >= @min_fav_count & "
-        "score >= @min_score & "
-        "down_score >= @min_down_score & "
-        "file_ext in @allowed_file_exts & "
-        "image_width >= @min_img_size & "
-        "image_height >= @min_img_size & "
-        "is_deleted == 'f' & "
-        "is_pending == 'f' & "
-        "is_flagged == 'f'",
-        inplace=True,
-    )
-    logging.info(
-        f"First-pass filtering with DataFrame.query took {time.time() - time_before:.1f}s and eliminated "
-        f"{len_before - len(posts_df)} posts, or {size_before - bytes_to_gigabytes(posts_df['file_size'].sum()):.1f} "
-        "GB worth of images"
-    )
-
-    # Filtering out undesirable tags:
-    time_before = time.time()
-    len_before = len(posts_df)
-    size_before = bytes_to_gigabytes(posts_df["file_size"].sum(), 2)
-    # Equivalent of "-young -cub -gore" etc.
-    posts_df = filter_posts_by_tags(
-        posts_df, None, {"young", "cub", "loli", "shota", "gore", "scat"}
-    )
-    logging.info(
-        f"Second-pass filtering took {time.time() - time_before:.1f}s and eliminated "
-        f"{len_before - len(posts_df)} posts, or {size_before - bytes_to_gigabytes(posts_df['file_size'].sum()):.1f} "
-        "GB worth of images"
-    )
 
     # If you want to do the equivalent of "rating:e", that can be accomplished by:
     num_explicit_posts = len(
